@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BYMA Alert Checker es un cron job minimalista para Render.io que verifica alertas de BYMA periódicamente.
+BYMA Alert Checker es un cron job minimalista que usa GitHub Actions para verificar alertas de BYMA periódicamente.
 
 ## Essential Commands
 
@@ -44,10 +44,10 @@ pytest --cov=src
 ### Core Philosophy: Single Execution Model
 
 Este proyecto usa el patrón **"run once and exit"**:
-- Render.io ejecuta el script en cada intervalo del cron
+- GitHub Actions ejecuta el script en cada intervalo del cron
 - El script ejecuta UNA verificación
 - El script termina (exit 0 o 1)
-- Render.io captura logs y status
+- GitHub Actions captura logs y status
 
 ### Components
 
@@ -59,8 +59,8 @@ Este proyecto usa el patrón **"run once and exit"**:
 - Logs detallados de alertas disparadas
 
 **Run Script ([src/run_check.py](src/run_check.py))**:
-- Entry point para Render.io
-- Configura logging a stdout (Render lo captura)
+- Entry point para GitHub Actions
+- Configura logging a stdout (GitHub Actions lo captura)
 - Ejecuta una sola verificación vía AlertCheck
 - Exit codes:
   - `0`: Verificación exitosa
@@ -69,7 +69,11 @@ Este proyecto usa el patrón **"run once and exit"**:
 ### Execution Flow
 
 ```
-Render.io Scheduler (cron expression)
+GitHub Actions Scheduler (cron expression)
+  ↓
+Trigger workflow cada 5 minutos (configurable)
+  ↓
+Setup Python 3.12 + Install dependencies
   ↓
 Ejecuta: python src/run_check.py
   ↓
@@ -83,58 +87,70 @@ Parse response, log results
   ↓
 Exit 0 (success) or 1 (failure)
   ↓
-Render captura logs y exit code
+GitHub Actions captura logs y exit code
 ```
 
 ## Configuration
 
-### Render.io Configuration ([render.yaml](render.yaml))
+### GitHub Actions Configuration ([.github/workflows/byma-alerts-checker.yml](.github/workflows/byma-alerts-checker.yml))
 
 ```yaml
-services:
-  - type: cron
-    name: byma-alerts-checker
-    runtime: python
-    schedule: '*/5 * * * *'  # Customizable
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
-    startCommand: python src/run_check.py
+name: BYMA Alerts Checker
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'  # Every 5 minutes (customizable)
+  workflow_dispatch:  # Manual execution
+
+jobs:
+  check-alerts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - run: pip install -r requirements.txt
+      - run: python src/run_check.py
+        env:
+          BYMA_API_URL: ${{ secrets.BYMA_API_URL }}
 ```
 
 **Key Fields**:
-- `type: cron` - Especifica que es un cron job
-- `schedule` - Expresión cron estándar (5 campos)
-- `startCommand` - Lo que Render ejecuta en cada intervalo
+- `schedule.cron` - Expresión cron estándar (5 campos)
+- `workflow_dispatch` - Permite ejecución manual desde GitHub UI
+- `secrets.BYMA_API_URL` - Variable de entorno desde GitHub Secrets
 
 ### Environment Variables
 
 **Required**:
 - `BYMA_API_URL`: API endpoint (no default en producción)
 
-**Optional**:
-- `PYTHON_VERSION`: Versión de Python (default: 3.12)
+**Configuration**: GitHub Repo → Settings → Secrets and variables → Actions → New repository secret
 
-**Configuration**: Set in Render Dashboard → Environment
-
-## Deployment on Render.io
+## Deployment on GitHub Actions
 
 ### Initial Setup
-1. Push repository to GitHub/GitLab
-2. Render Dashboard → New → Cron Job
-3. Connect repository
-4. Render auto-detects `render.yaml`
-5. Set `BYMA_API_URL` in Environment tab
-6. Deploy
+1. Push repository to GitHub
+2. GitHub Repo → Settings → Secrets and variables → Actions
+3. Add secret: `BYMA_API_URL` = your API endpoint
+4. Workflow auto-executes cada 5 minutos (o ejecuta manualmente)
 
 ### Updates
 ```bash
 git commit -am "Update alert logic"
 git push origin main
-# Render auto-rebuilds and redeploys
+# GitHub Actions auto-ejecuta con los nuevos cambios
 ```
 
 ### Monitoring
-- Dashboard → Logs: Ver logs de cada ejecución
-- Dashboard → Settings → Notifications: Configurar alertas de fallos
+- GitHub Repo → Actions tab: Ver todas las ejecuciones
+- Click en workflow específico → Ver logs detallados de cada step
+- Email automático si workflow falla
+
+### Manual Execution
+- Actions → "BYMA Alerts Checker" → "Run workflow" → Run workflow
 
 ## Important Patterns
 
@@ -150,7 +166,7 @@ def main():
 ```
 
 ### Logging to Stdout
-Render captura stdout, así que logs deben ir ahí:
+GitHub Actions captura stdout, así que logs deben ir ahí:
 ```python
 logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)]
@@ -170,17 +186,19 @@ Minimalistas from [requirements.txt](requirements.txt):
 - `pytest>=7.0.0` - Testing (opcional, dev-only)
 
 **NO incluye**:
-- `croniter` (no necesario, Render maneja scheduling)
+- `croniter` (no necesario, GitHub Actions maneja scheduling)
 - `http.server` libraries (no health checks)
 
 ## Common Tasks
 
 ### Change Schedule
-Edit [render.yaml](render.yaml):
+Edit [.github/workflows/byma-alerts-checker.yml](.github/workflows/byma-alerts-checker.yml):
 ```yaml
-schedule: '*/15 * * * *'  # Every 15 minutes
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # Every 15 minutes
 ```
-Commit and push. Render will update.
+Commit and push. GitHub Actions will update automatically.
 
 ### Add Logging
 Logs go to stdout. Add logging calls in [src/alert_check.py](src/alert_check.py) or [src/run_check.py](src/run_check.py):
@@ -192,7 +210,7 @@ logger.info("Your message here")
 Update parsing logic in [src/alert_check.py](src/alert_check.py) `check_alerts()` method.
 
 ### Add Error Notifications
-Configure in Render Dashboard → Settings → Notifications. No code changes needed.
+GitHub envía emails automáticamente cuando un workflow falla. Para customizar: GitHub Profile → Settings → Notifications → Actions.
 
 ## Testing Strategy
 
@@ -215,24 +233,26 @@ def test_initialization():
 
 ## Troubleshooting
 
-### Job not running on schedule
+### Workflow not running on schedule
 - Verify cron expression at [crontab.guru](https://crontab.guru)
-- Check job is "Active" in Render dashboard
-- Review build logs for errors
+- Check workflow is enabled: Actions → Workflows → "BYMA Alerts Checker"
+- Verify file `.github/workflows/byma-alerts-checker.yml` exists in `main` branch
+- GitHub desactiva workflows si no hay actividad en 60 días → Re-enable manualmente
 
 ### Connection errors
-- Verify `BYMA_API_URL` is correct and accessible from internet
-- Check API endpoint firewall/security settings
+- Verify `BYMA_API_URL` secret is set correctly in GitHub Settings → Secrets
+- Check API endpoint is accessible from internet
 - Test endpoint with curl from external location
+- Review logs in Actions tab for detailed error messages
 
-### Build failures
-- Check `requirements.txt` syntax
-- Review build logs in Render dashboard
-- Try "Clear build cache & deploy"
+### Secret not working
+- Verify secret name is exactly `BYMA_API_URL` (case-sensitive)
+- Secrets take effect in next workflow run (not retroactive)
+- Try re-running the workflow manually
 
 ## Cost Optimization
 
-- Render charges per-second of execution time
-- Longer intervals = lower cost (e.g., every 15 min vs every 5 min)
-- Optimize script for fast execution
-- Typical run time should be 1-5 seconds
+- **GitHub Actions es GRATIS** para repos públicos (2,000 min/mes)
+- Repos privados: 3,000 min/mes gratis, luego $0.008/min
+- Este proyecto usa ~4,320 min/mes (si cada run toma 30 seg)
+- **Recomendación**: Usar repo público = $0 costo total

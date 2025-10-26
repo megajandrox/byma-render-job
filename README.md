@@ -1,18 +1,19 @@
-# BYMA Alert Checker - Render.io Cron Job
+# BYMA Alert Checker - GitHub Actions Cron Job
 
-Servicio minimalista para verificar alertas de BYMA (Bolsas y Mercados Argentinos) usando Render.io Cron Jobs.
+Servicio minimalista para verificar alertas de BYMA (Bolsas y Mercados Argentinos) usando GitHub Actions scheduled workflows.
 
 ## Descripción
 
-Este proyecto ejecuta verificaciones periódicas de alertas llamando a un endpoint de la API de BYMA. A diferencia de un daemon continuo, este servicio se ejecuta como un **cron job** donde Render.io maneja el scheduling y ejecuta el script en cada intervalo configurado.
+Este proyecto ejecuta verificaciones periódicas de alertas llamando a un endpoint de la API de BYMA. A diferencia de un daemon continuo, este servicio se ejecuta como un **cron job** donde GitHub Actions maneja el scheduling y ejecuta el script en cada intervalo configurado.
 
 ## Características
 
-- **Cron Job nativo**: Render.io maneja el scheduling
+- **Cron Job nativo**: GitHub Actions maneja el scheduling automáticamente
 - **Ejecución única**: Cada run ejecuta una verificación y termina
 - **Sin daemon**: No requiere proceso continuo ni health checks
-- **Logs centralizados**: Render.io captura todos los logs automáticamente
-- **Configuración simple**: Un solo archivo `render.yaml`
+- **Logs centralizados**: GitHub Actions captura todos los logs automáticamente
+- **Configuración simple**: Un solo archivo `.github/workflows/byma-alerts-checker.yml`
+- **100% Gratis**: Sin costos de infraestructura (2,000-3,000 minutos/mes incluidos)
 
 ## Arquitectura
 
@@ -24,12 +25,15 @@ Este proyecto ejecuta verificaciones periódicas de alertas llamando a un endpoi
 ### Flujo de Ejecución
 
 ```
-Render.io (scheduler)
+GitHub Actions (scheduler)
+  → Trigger cada 5 minutos (configurable)
+  → Setup Python + Install dependencies
   → Ejecuta: python src/run_check.py
   → AlertCheck().check_alerts()
   → Llama a: {BYMA_API_URL}/api/v1/alerts/check
   → Logs a stdout
   → Exit (0=success, 1=failure)
+  → GitHub captura logs y status
 ```
 
 ## Setup Local
@@ -77,48 +81,49 @@ export BYMA_API_URL=http://localhost:8000
 python src/run_check.py
 ```
 
-## Deployment en Render.io
+## Deployment en GitHub Actions
 
-### Opción 1: Usando el Dashboard (Recomendado)
+### Setup Inicial
 
-1. **Crear cuenta en Render.io**: [render.com](https://render.com)
+1. **Clonar/Fork este repositorio en GitHub**
 
-2. **Conectar repositorio**:
-   - Click en "New +" → "Cron Job"
-   - Conecta tu cuenta de GitHub/GitLab
-   - Selecciona este repositorio
+2. **Configurar Secrets**:
+   - Ve a tu repositorio en GitHub
+   - Settings → Secrets and variables → Actions
+   - Click en "New repository secret"
+   - Agrega:
+     - **Name**: `BYMA_API_URL`
+     - **Value**: Tu URL de API (ej: `https://api.byma.com.ar`)
 
-3. **Configuración automática**:
-   - Render detectará el archivo `render.yaml`
-   - Click en "Apply" para crear el cron job
+3. **Activar el workflow**:
+   - El workflow se activa automáticamente al hacer push
+   - O manualmente: Actions → "BYMA Alerts Checker" → "Run workflow"
 
-4. **Configurar variables de entorno**:
-   - En el dashboard de tu cron job, ve a "Environment"
-   - Agrega: `BYMA_API_URL` con tu endpoint real
-   - Ejemplo: `https://api.byma.com.ar` o tu URL personalizada
+4. **Verificar ejecución**:
+   - Ve a la pestaña "Actions" en tu repositorio
+   - Verás las ejecuciones cada 5 minutos
 
-5. **Activar**: El cron job comenzará a ejecutarse según el schedule configurado
+### Ejecución Manual
 
-### Opción 2: Usando Blueprint (IaC)
+Para ejecutar el check manualmente sin esperar el schedule:
 
-Si prefieres Infrastructure as Code:
-
-```bash
-# Render detectará automáticamente render.yaml en el repositorio
-git push origin main
-```
+1. Ve a: Actions → "BYMA Alerts Checker"
+2. Click en "Run workflow"
+3. Selecciona la branch (normalmente `main`)
+4. Click en "Run workflow"
 
 ### Configuración del Schedule
 
 El schedule predeterminado es cada 5 minutos (`*/5 * * * *`). Para modificarlo:
 
-**En render.yaml**:
+**Editar [.github/workflows/byma-alerts-checker.yml](.github/workflows/byma-alerts-checker.yml)**:
 ```yaml
-schedule: '*/15 * * * *'  # Cada 15 minutos
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # Cambiar a cada 15 minutos
 ```
 
-**O en el Dashboard**:
-- Settings → Schedule → Editar expresión cron
+Luego hacer commit y push de los cambios.
 
 #### Ejemplos de Schedules
 
@@ -140,11 +145,13 @@ schedule: '*/15 * * * *'  # Cada 15 minutos
 
 ## Monitoreo y Logs
 
-### Ver Logs en Render
+### Ver Logs en GitHub Actions
 
-1. Dashboard → Tu cron job → "Logs"
-2. Cada ejecución aparecerá con timestamp
-3. Puedes filtrar por fecha/hora
+1. Ve a la pestaña **Actions** en tu repositorio
+2. Click en el workflow "BYMA Alerts Checker"
+3. Selecciona una ejecución específica
+4. Click en el job "check-alerts" para ver logs detallados
+5. Cada step muestra su output completo
 
 ### Ejemplo de Log Exitoso
 
@@ -161,42 +168,57 @@ schedule: '*/15 * * * *'  # Cada 15 minutos
 
 ### Notificaciones de Fallos
 
-Render puede enviarte notificaciones por email si un cron job falla:
-- Dashboard → Settings → Notifications
-- Configura tu email y alertas
+GitHub Actions puede enviarte notificaciones automáticamente:
+- **Email**: Configurado por defecto si un workflow falla
+- **GitHub UI**: Badge de status en la pestaña Actions
+- **Customizar**: Settings → Notifications → Actions (en tu perfil de GitHub)
 
 ## Troubleshooting
 
-### El cron job no se ejecuta
+### El workflow no se ejecuta
 
 **Verificar**:
-1. Schedule está en formato correcto (usa [crontab.guru](https://crontab.guru) para validar)
-2. El cron job está "activo" en el dashboard
-3. No hay errores en los logs de build
+1. El archivo `.github/workflows/byma-alerts-checker.yml` existe en la branch `main`
+2. Schedule está en formato correcto (usa [crontab.guru](https://crontab.guru) para validar)
+3. El repositorio ha tenido actividad en los últimos 60 días (GitHub desactiva workflows inactivos)
+4. Ve a Actions → Workflows y verifica que "BYMA Alerts Checker" esté habilitado
 
 ### Error "Connection refused" o timeout
 
 **Solución**:
-- Verificar que `BYMA_API_URL` esté configurado correctamente
+- Verificar que `BYMA_API_URL` esté configurado como secret en GitHub
 - Verificar que el endpoint sea accesible desde internet
 - Revisar firewall/seguridad del API endpoint
+- Probar ejecutar manualmente el workflow para ver logs detallados
 
 ### Error "No module named 'requests'"
 
 **Solución**:
-- Verificar que `requirements.txt` existe y está correcto
-- Forzar rebuild: Dashboard → Manual Deploy → "Clear build cache & deploy"
+- Verificar que `requirements.txt` existe y está correcto en el repositorio
+- El error no debería ocurrir ya que el workflow instala dependencias automáticamente
+- Si ocurre, revisar los logs del step "Install dependencies"
+
+### El workflow se desactiva automáticamente
+
+**Causa**: GitHub desactiva workflows scheduled si no hay actividad en 60 días
+
+**Solución**:
+- Hacer un commit cualquiera (ej: actualizar README)
+- O habilitar manualmente en: Actions → Workflows → "BYMA Alerts Checker" → Enable
 
 ## Costos
 
-Render cobra por tiempo de ejecución activo:
+GitHub Actions es **100% GRATIS** para este uso:
 
-- **Mínimo mensual**: $1 USD por cron job
-- **Cobro**: Prorrateado por segundo de ejecución
-- **Ejemplo**: Si cada run toma 2 segundos y ejecutas cada 5 minutos:
-  - ~8,640 ejecuciones/mes
-  - ~17,280 segundos = 4.8 horas
-  - Costo estimado: ~$1-2 USD/mes
+- **Repositorios públicos**: 2,000 minutos/mes GRATIS
+- **Repositorios privados**: 3,000 minutos/mes GRATIS (con plan Free)
+- **Uso estimado de este proyecto**:
+  - Cada ejecución: ~30 segundos (con setup de Python e instalación)
+  - Frecuencia: cada 5 minutos = 288 ejecuciones/día = 8,640/mes
+  - Total mensual: ~4,320 minutos (260 horas)
+  - **Costo**: $0 USD (dentro del límite gratuito para repos públicos)
+
+**Nota**: Si usas repositorio privado, considerarías ~1,320 minutos extra sobre el límite, pero GitHub cobra solo $0.008 por minuto extra = ~$10.56/mes. **Recomendación**: Usar repositorio público para mantenerlo 100% gratis.
 
 ## Diferencias vs Daemon Continuo
 
@@ -204,16 +226,18 @@ Render cobra por tiempo de ejecución activo:
 |----------------|-------------------------|-----------------|
 | Ejecución | Intervalos definidos | Continuo 24/7 |
 | Health Check | No necesario | Requerido |
-| Billing | Por tiempo de ejecución | Por tiempo total |
+| Billing | GRATIS (GitHub Actions) | Por tiempo total |
 | Código | Simple (~100 líneas) | Complejo (~350 líneas) |
-| Plataforma | Render.io cron | Railway/Heroku web |
+| Plataforma | GitHub Actions | Railway/Heroku/Render web |
+| Setup | 2 minutos (agregar secret) | 10-15 minutos (deploy + config) |
 
 ## Soporte
 
 Para problemas o preguntas:
-1. Revisa los logs en Render dashboard
-2. Verifica configuración de variables de entorno
-3. Consulta [Render Docs - Cron Jobs](https://render.com/docs/cronjobs)
+1. Revisa los logs en GitHub Actions (pestaña "Actions")
+2. Verifica configuración de secrets en Settings → Secrets and variables → Actions
+3. Consulta [GitHub Actions Docs](https://docs.github.com/en/actions)
+4. Abre un issue en este repositorio
 
 ## Licencia
 
