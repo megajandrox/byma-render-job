@@ -53,7 +53,7 @@ Este proyecto usa el patrón **"run once and exit"**:
 
 **Alert Check Client ([src/alert_check.py](src/alert_check.py))**:
 - HTTP client que llama al endpoint BYMA
-- Endpoint: `{BYMA_API_URL}/api/v1/alerts/check`
+- Endpoint: `{BYMA_API_URL}/api/v1/system/alerts/check`
 - Maneja errores de red y timeouts
 - Retorna Dict con resultados o None en error
 - Logs detallados de alertas disparadas
@@ -81,7 +81,7 @@ run_check.main()
   ↓
 AlertCheck().check_alerts()
   ↓
-HTTP GET → {BYMA_API_URL}/api/v1/alerts/check
+HTTP GET → {BYMA_API_URL}/api/v1/system/alerts/check
   ↓
 Parse response, log results
   ↓

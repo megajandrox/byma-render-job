@@ -2,8 +2,9 @@ name: BYMA Alerts Checker
 
 on:
   schedule:
-    # Ejecutar cada 5 minutos
-    - cron: '*/5 * * * *'
+    # Ejecutar cada 5 minutos, lunes a viernes, 10 AM - 6 PM hora Argentina (GMT-3)
+    # Esto es 1 PM - 9 PM UTC (GitHub Actions usa UTC)
+    - cron: '*/5 13-20 * * 1-5'
   workflow_dispatch:  # Permite ejecución manual desde GitHub UI
 
 jobs:
